@@ -26,16 +26,18 @@ func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(*timerSeconds)*time.Second)
 	defer cancel()
 
-	errs := make(chan error, 1)
+	quizResult := make(chan quiz.Result, 1)
 	go func() {
-		errs <- quiz.Exec(ctx, quizFilepath)
+		quizResult <- quiz.Exec(ctx, quizFilepath)
 	}()
 
 	select {
-	case err := <-errs:
-		if err != nil {
-			fmt.Println(err)
+	case result := <-quizResult:
+		if result.Err != nil {
+			fmt.Println(result.Err)
+			return
 		}
+		fmt.Println(result)
 		return
 	case <-ctx.Done():
 		fmt.Println("Exceeded quiz timelimit.")
