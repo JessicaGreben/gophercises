@@ -2,13 +2,14 @@ package quiz
 
 import (
 	"bufio"
+	"context"
 	"encoding/csv"
 	"fmt"
 	"os"
 	"strings"
 )
 
-func Exec(quizFilepath string) error {
+func Exec(ctx context.Context, quizFilepath string) error {
 	fd, err := os.Open(quizFilepath)
 	if err != nil {
 		return fmt.Errorf("os.Open: %w", err)
@@ -18,7 +19,9 @@ func Exec(quizFilepath string) error {
 	if err != nil {
 		return fmt.Errorf("csv ReadAll: %w", err)
 	}
-	var countCorrect, countIncorrect int
+
+	scanner := bufio.NewScanner(os.Stdin)
+	var correctCount, incorrectCount int
 	for i := 1; i < len(rows); i++ {
 		row := rows[i]
 		if len(row) != 2 {
@@ -26,15 +29,18 @@ func Exec(quizFilepath string) error {
 		}
 		question, answer := row[0], row[1]
 		fmt.Println("Question: ", question)
-		scanner := bufio.NewScanner(os.Stdin)
+
 		scanner.Scan()
 		text := scanner.Text()
 		if strings.TrimSpace(text) != answer {
-			countIncorrect++
+			incorrectCount++
 		} else {
-			countCorrect++
+			correctCount++
 		}
 	}
-	fmt.Printf("Quiz completed. Total question count: %d. %d correct, %d incorrect.\n", len(rows)-1, countCorrect, countIncorrect)
+	fmt.Printf("Quiz completed. Total question count: %d. %d correct, %d incorrect.\n",
+		len(rows)-1, correctCount, incorrectCount,
+	)
+
 	return nil
 }

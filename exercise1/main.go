@@ -1,15 +1,18 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/jessicagreben/gophercises/exercise1/pkg/quiz"
 )
 
-var customFileName = flag.String("file", "problems.csv", "path of a file containing a quiz")
+var quizFileName = flag.String("file", "problems.csv", "path to the file containing a quiz")
+var timerSeconds = flag.Int("timer", 30, "the time allowed to complete quiz in seconds, default is 30s")
 
 func main() {
 	flag.Parse()
@@ -18,8 +21,24 @@ func main() {
 	if err != nil {
 		fmt.Printf("err os.Getwd %v\n", err)
 	}
-	quizFilepath := filepath.Join(dir, "quizzes", *customFileName)
-	if err := quiz.Exec(quizFilepath); err != nil {
-		fmt.Printf("err quiz.Exec %v\n", err)
+	quizFilepath := filepath.Join(dir, "quizzes", *quizFileName)
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(*timerSeconds)*time.Second)
+	defer cancel()
+
+	errs := make(chan error, 1)
+	go func() {
+		errs <- quiz.Exec(ctx, quizFilepath)
+	}()
+
+	select {
+	case err := <-errs:
+		if err != nil {
+			fmt.Println(err)
+		}
+		return
+	case <-ctx.Done():
+		fmt.Println("Exceeded quiz timelimit.")
+		return
 	}
 }
