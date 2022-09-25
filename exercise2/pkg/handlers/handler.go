@@ -1,7 +1,7 @@
 package handlers
 
 import (
-	"log"
+	"fmt"
 	"net/http"
 
 	"gopkg.in/yaml.v2"
@@ -16,48 +16,43 @@ func MapHandler(fallback http.Handler) http.HandlerFunc {
 	}
 
 	return func(w http.ResponseWriter, r *http.Request) {
-		log.Println("map endpoint", r.URL.Path)
+		fmt.Println("map endpoint", r.URL.Path)
 		v, ok := pathsToUrls[r.URL.Path]
 		if ok {
-			log.Println("redirecting to", v)
+			fmt.Println("redirecting to", v)
 			http.Redirect(w, r, v, http.StatusTemporaryRedirect)
 			return
 		}
-		log.Println("fallback to default mux")
+		fmt.Println("fallback to default mux")
 		fallback.ServeHTTP(w, r)
 	}
 }
 
-// YAMLHandler parses the provided YAML and will redirect to
-// if defined in the YAML.
-// YAML is expected to be in the format:
-//     - path: /some-path
-//       url: https://www.some-url.com/demo
-func YAMLHandler(yml []byte, fallback http.Handler) (http.HandlerFunc, error) {
-	return func(w http.ResponseWriter, r *http.Request) {
-		y := parseYaml(yml)
-		for _, x := range y {
-			if r.URL.Path == x.Path {
-				log.Println("redirecting to", x.Url)
-				http.Redirect(w, r, x.Url, http.StatusTemporaryRedirect)
-				return
-			}
-		}
-		log.Println("fallback to map handler")
-		fallback.ServeHTTP(w, r)
-	}, nil
-}
-
-type YamlStruct struct {
+type YamlData struct {
 	Url  string `yaml:"url"`
 	Path string `yaml:"path"`
 }
 
-func parseYaml(yml []byte) []YamlStruct {
-	var y []YamlStruct
-	err := yaml.Unmarshal(yml, &y)
+// YAMLHandler parses the provided YAML and will redirect to the URL
+// if the path matches from the YAML.
+// YAML is expected to be in the format:
+//     - path: /some-path
+//       url: https://www.some-url.com/demo
+func YAMLHandler(yml []byte, fallback http.Handler) (http.HandlerFunc, error) {
+	var parsedYaml []YamlData
+	err := yaml.Unmarshal(yml, &parsedYaml)
 	if err != nil {
-		log.Fatalf("cannot unmarshal data: %v", err)
+		fmt.Println(err)
 	}
-	return y
+	return func(w http.ResponseWriter, r *http.Request) {
+		for _, y := range parsedYaml {
+			if r.URL.Path == y.Path {
+				fmt.Println("redirecting to", y.Url)
+				http.Redirect(w, r, y.Url, http.StatusTemporaryRedirect)
+				return
+			}
+		}
+		fmt.Println("fallback to map handler")
+		fallback.ServeHTTP(w, r)
+	}, err
 }
