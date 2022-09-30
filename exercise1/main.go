@@ -6,41 +6,51 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"time"
 
 	"github.com/jessicagreben/gophercises/exercise1/pkg/quiz"
 )
 
-var quizFileName = flag.String("file", "problems.csv", "path to the file containing a quiz")
-var timerSeconds = flag.Int("timer", 30, "the time allowed to complete quiz in seconds, default is 30s")
+var (
+	quizFileName = flag.String("file", "problems.csv", "path to the file containing a quiz")
+	timerSeconds = flag.Int("timer", 30, "the time allowed to complete the quiz in seconds")
+)
+
+var usage = `Usage of %s:
+
+	exercise1 [options...]
+
+Example usage:
+	$ exercise1
+	$ exercise1 -help
+	$ exercise1 -file quiz.csv
+	$ exercise1 -timer 60
+
+Flags:
+`
 
 func main() {
+	flag.Usage = func() {
+		fmt.Fprintf(flag.CommandLine.Output(), usage, os.Args[0])
+		flag.PrintDefaults()
+		fmt.Println()
+	}
 	flag.Parse()
 
 	dir, err := os.Getwd()
 	if err != nil {
 		fmt.Printf("err os.Getwd %v\n", err)
+		os.Exit(1)
 	}
 	quizFilepath := filepath.Join(dir, "quizzes", *quizFileName)
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(*timerSeconds)*time.Second)
-	defer cancel()
-
-	quizResult := make(chan quiz.Result, 1)
-	go func() {
-		quizResult <- quiz.Exec(ctx, quizFilepath)
-	}()
-
-	select {
-	case result := <-quizResult:
-		if result.Err != nil {
-			fmt.Println(result.Err)
-			return
-		}
-		fmt.Println(result)
-		return
-	case <-ctx.Done():
-		fmt.Println("Exceeded quiz timelimit.")
-		return
+	q, err := quiz.NewQuiz(context.Background(), quizFilepath, *timerSeconds)
+	if err != nil {
+		fmt.Printf("err NewQuiz %v\n", err)
+		os.Exit(1)
 	}
+	if err := q.Exec(); err != nil {
+		fmt.Printf("err quiz.Exec %v\n", err)
+		os.Exit(1)
+	}
+	fmt.Println(q.Result())
 }
