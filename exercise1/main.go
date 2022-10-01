@@ -43,7 +43,7 @@ func main() {
 	}
 	quizFilepath := filepath.Join(dir, "quizzes", *quizFileName)
 
-	q, err := quiz.NewQuiz(context.Background(), quizFilepath, *timerSeconds)
+	q, err := quiz.NewQuiz(context.Background(), quizFilepath, *timerSeconds, os.Stdin, os.Stdout)
 	if err != nil {
 		fmt.Printf("err NewQuiz %v\n", err)
 		os.Exit(1)

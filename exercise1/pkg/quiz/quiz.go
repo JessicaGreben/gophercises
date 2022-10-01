@@ -4,9 +4,16 @@ import (
 	"bufio"
 	"context"
 	"encoding/csv"
+	"errors"
 	"fmt"
+	"io"
 	"os"
 	"time"
+)
+
+var (
+	ErrTimeout        = errors.New("time limit exceeded")
+	ErrQuizIncomplete = errors.New("not all questions are answered")
 )
 
 type Quiz struct {
@@ -16,15 +23,17 @@ type Quiz struct {
 	currQuestion    int
 	currAnswer      int
 	result          *Result
+	w               io.Writer
 	scanner         *bufio.Scanner
 }
 
-func NewQuiz(ctx context.Context, quizFilepath string, timerSeconds int) (*Quiz, error) {
+func NewQuiz(ctx context.Context, quizFilepath string, timerSeconds int, r io.Reader, w io.Writer) (*Quiz, error) {
 	q := &Quiz{
 		ctx:     ctx,
 		timer:   time.Duration(timerSeconds) * time.Second,
 		result:  &Result{},
-		scanner: bufio.NewScanner(os.Stdin),
+		w:       w,
+		scanner: bufio.NewScanner(r),
 	}
 	err := q.parseQuestionAnswers(quizFilepath)
 	return q, err
@@ -74,10 +83,10 @@ func (q *Quiz) Result() Result {
 }
 
 func (q *Quiz) AskQuestion() {
-	fmt.Println("Question: ", q.Question())
+	fmt.Fprintln(q.w, "Question: ", q.Question())
 }
 
-func (q *Quiz) ReadAnswer() (string, error) {
+func (q *Quiz) UserInputAnswer() (string, error) {
 	if ok := q.scanner.Scan(); !ok {
 		return "", q.scanner.Err()
 	}
@@ -92,7 +101,7 @@ func (q *Quiz) Exec() error {
 	go func() {
 		for q.Next() {
 			q.AskQuestion()
-			usersAnswer, err := q.ReadAnswer()
+			usersAnswer, err := q.UserInputAnswer()
 			if err != nil {
 				quizCompleted <- err
 			}
@@ -105,7 +114,7 @@ func (q *Quiz) Exec() error {
 		if q.Completed() {
 			quizCompleted <- nil
 		} else {
-			quizCompleted <- fmt.Errorf("not all questions are answered")
+			quizCompleted <- fmt.Errorf("%w", ErrQuizIncomplete)
 		}
 	}()
 
@@ -113,8 +122,16 @@ func (q *Quiz) Exec() error {
 	case completed := <-quizCompleted:
 		return completed
 	case <-ctx.Done():
-		return fmt.Errorf("exceeded quiz time limit %v", q.timer)
+		return fmt.Errorf("%w %v", ErrTimeout, q.timer)
 	}
+}
+
+func (q *Quiz) CorrectAnswerCount() int {
+	return q.result.CorrectAnswerCount
+}
+
+func (q *Quiz) IncorrectAnswerCount() int {
+	return q.result.IncorrectAnswerCount
 }
 
 type questionAnswer struct {
@@ -132,7 +149,6 @@ func newQuestionAnswer(q, a string) questionAnswer {
 type Result struct {
 	CorrectAnswerCount   int
 	IncorrectAnswerCount int
-	Err                  error
 }
 
 func (r Result) String() string {
