@@ -6,7 +6,6 @@ import (
 	"encoding/csv"
 	"fmt"
 	"os"
-	"strings"
 	"time"
 )
 
@@ -17,13 +16,15 @@ type Quiz struct {
 	currQuestion    int
 	currAnswer      int
 	result          *Result
+	scanner         *bufio.Scanner
 }
 
 func NewQuiz(ctx context.Context, quizFilepath string, timerSeconds int) (*Quiz, error) {
 	q := &Quiz{
-		ctx:    ctx,
-		timer:  time.Duration(timerSeconds) * time.Second,
-		result: &Result{},
+		ctx:     ctx,
+		timer:   time.Duration(timerSeconds) * time.Second,
+		result:  &Result{},
+		scanner: bufio.NewScanner(os.Stdin),
 	}
 	err := q.parseQuestionAnswers(quizFilepath)
 	return q, err
@@ -72,20 +73,30 @@ func (q *Quiz) Result() Result {
 	return *q.result
 }
 
+func (q *Quiz) AskQuestion() {
+	fmt.Println("Question: ", q.Question())
+}
+
+func (q *Quiz) ReadAnswer() (string, error) {
+	if ok := q.scanner.Scan(); !ok {
+		return "", q.scanner.Err()
+	}
+	return q.scanner.Text(), nil
+}
+
 func (q *Quiz) Exec() error {
 	ctx, cancel := context.WithTimeout(q.ctx, q.timer)
 	defer cancel()
 
 	quizCompleted := make(chan error, 1)
 	go func() {
-		scanner := bufio.NewScanner(os.Stdin)
 		for q.Next() {
-			fmt.Println("Question: ", q.Question())
-			if ok := scanner.Scan(); !ok {
-				quizCompleted <- scanner.Err()
+			q.AskQuestion()
+			usersAnswer, err := q.ReadAnswer()
+			if err != nil {
+				quizCompleted <- err
 			}
-			text := scanner.Text()
-			if strings.TrimSpace(text) != q.Answer() {
+			if usersAnswer != q.Answer() {
 				q.result.IncorrectAnswerCount++
 			} else {
 				q.result.CorrectAnswerCount++
