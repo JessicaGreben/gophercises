@@ -1,19 +1,19 @@
 package quiz_test
 
 import (
-	"bytes"
+	//"bytes"
 	"context"
 	"errors"
 	"io"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/jessicagreben/gophercises/exercise1/pkg/quiz"
 )
 
-func newTestQuiz(t *testing.T, timer int, r io.Reader, w io.Writer) *quiz.Quiz {
+func newTestQuiz(t *testing.T, timer time.Duration, r io.Reader, w io.Writer) *quiz.Quiz {
 	t.Helper()
 	testQuizFilepath := filepath.Join("..", "..", "quizzes", "testdata.csv")
 	q, err := quiz.NewQuiz(context.Background(), testQuizFilepath, timer, r, w)
@@ -23,35 +23,17 @@ func newTestQuiz(t *testing.T, timer int, r io.Reader, w io.Writer) *quiz.Quiz {
 	return q
 }
 
-func TestQuizInit(t *testing.T) {
-	q := newTestQuiz(t, 5, nil, io.Discard)
-	expectedQuestions := []string{"1", "2", "3"}
-	expectedAnswers := []string{"A", "B", "C"}
-	for i := 0; i < len(expectedQuestions); i++ {
-		if want, got := false, q.Completed(); want != got {
-			t.Errorf("want: %v got: %v", want, got)
-		}
-		if want, got := true, q.Next(); want != got {
-			t.Errorf("want: %v, got: %v", want, got)
-		}
-		if want, got := expectedQuestions[i], q.Question(); want != got {
-			t.Errorf("want: %s, got: %s", want, got)
-		}
-		if want, got := expectedAnswers[i], q.Answer(); want != got {
-			t.Errorf("want: %s, got: %s", want, got)
-		}
-	}
+type SleepyReader struct {
+}
 
-	if want, got := false, q.Next(); want != got {
-		t.Errorf("want: %v, got: %v", want, got)
-	}
-	if want, got := true, q.Completed(); want != got {
-		t.Errorf("want: %v got: %v", want, got)
-	}
+func (r SleepyReader) Read(p []byte) (n int, err error) {
+	time.Sleep(time.Duration(50) * time.Millisecond)
+	return 1, nil
 }
 
 func TestQuizExecTimeout(t *testing.T) {
-	q := newTestQuiz(t, 0, ioutil.NopCloser(bytes.NewReader(nil)), io.Discard)
+	r := SleepyReader{}
+	q := newTestQuiz(t, time.Duration(5)*time.Millisecond, r, io.Discard)
 	if want, got := quiz.ErrTimeout, q.Exec(); !errors.Is(got, want) {
 		t.Errorf("want: %v, got: %v", want, got)
 	}
@@ -94,7 +76,7 @@ func TestQuizExecCorrect(t *testing.T) {
 				t.Fatalf("%v\n", err)
 			}
 			w.Close()
-			q := newTestQuiz(t, 5, r, w)
+			q := newTestQuiz(t, time.Duration(5)*time.Second, r, w)
 			if got := q.Exec(); got != nil {
 				t.Errorf("want: %v, got: %v", nil, got)
 			}

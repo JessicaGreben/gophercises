@@ -17,20 +17,19 @@ var (
 )
 
 type Quiz struct {
-	ctx             context.Context
-	timer           time.Duration
-	questionAnswers []questionAnswer
-	currQuestion    int
-	currAnswer      int
-	result          *Result
-	w               io.Writer
-	scanner         *bufio.Scanner
+	ctx          context.Context
+	timer        time.Duration
+	questions    []question
+	currQuestion int
+	result       *Result
+	w            io.Writer
+	scanner      *bufio.Scanner
 }
 
-func NewQuiz(ctx context.Context, quizFilepath string, timerSeconds int, r io.Reader, w io.Writer) (*Quiz, error) {
+func NewQuiz(ctx context.Context, quizFilepath string, timer time.Duration, r io.Reader, w io.Writer) (*Quiz, error) {
 	q := &Quiz{
 		ctx:     ctx,
-		timer:   time.Duration(timerSeconds) * time.Second,
+		timer:   timer,
 		result:  &Result{},
 		w:       w,
 		scanner: bufio.NewScanner(r),
@@ -49,41 +48,27 @@ func (q *Quiz) parseQuestionAnswers(quizFilepath string) error {
 	if err != nil {
 		return err
 	}
-	qa := []questionAnswer{}
+	qa := []question{}
 	for i := 1; i < len(rows); i++ {
 		row := rows[i]
-		qa = append(qa, newQuestionAnswer(row[0], row[1]))
+		qa = append(qa, newQuestion(row[0], row[1]))
 	}
-	q.questionAnswers = qa
+	q.questions = qa
 	return nil
 }
 
-func (q *Quiz) Next() bool {
-	return q.currQuestion < len(q.questionAnswers)
-}
-
-func (q *Quiz) Question() string {
-	nextQuestion := q.questionAnswers[q.currQuestion]
+func (q *Quiz) NextQuestion() question {
+	nextQuestion := q.questions[q.currQuestion]
 	q.currQuestion++
-	return nextQuestion.question
-}
-
-func (q *Quiz) Answer() string {
-	nextAnswer := q.questionAnswers[q.currAnswer]
-	q.currAnswer++
-	return nextAnswer.answer
+	return nextQuestion
 }
 
 func (q *Quiz) Completed() bool {
-	return q.currAnswer == len(q.questionAnswers)
+	return q.currQuestion == len(q.questions)
 }
 
 func (q *Quiz) Result() Result {
 	return *q.result
-}
-
-func (q *Quiz) AskQuestion() {
-	fmt.Fprintln(q.w, "Question: ", q.Question())
 }
 
 func (q *Quiz) UserInputAnswer() (string, error) {
@@ -99,23 +84,20 @@ func (q *Quiz) Exec() error {
 
 	quizCompleted := make(chan error, 1)
 	go func() {
-		for q.Next() {
-			q.AskQuestion()
+		for !q.Completed() {
+			qa := q.NextQuestion()
+			fmt.Fprintln(q.w, "Question: ", qa.question)
 			usersAnswer, err := q.UserInputAnswer()
 			if err != nil {
 				quizCompleted <- err
 			}
-			if usersAnswer != q.Answer() {
+			if usersAnswer != qa.answer {
 				q.result.IncorrectAnswerCount++
 			} else {
 				q.result.CorrectAnswerCount++
 			}
 		}
-		if q.Completed() {
-			quizCompleted <- nil
-		} else {
-			quizCompleted <- fmt.Errorf("%w", ErrQuizIncomplete)
-		}
+		quizCompleted <- nil
 	}()
 
 	select {
@@ -134,13 +116,13 @@ func (q *Quiz) IncorrectAnswerCount() int {
 	return q.result.IncorrectAnswerCount
 }
 
-type questionAnswer struct {
+type question struct {
 	question string
 	answer   string
 }
 
-func newQuestionAnswer(q, a string) questionAnswer {
-	return questionAnswer{
+func newQuestion(q, a string) question {
+	return question{
 		question: q,
 		answer:   a,
 	}
