@@ -1,7 +1,6 @@
 package quiz_test
 
 import (
-	//"bytes"
 	"context"
 	"errors"
 	"io"
@@ -39,7 +38,7 @@ func TestQuizExecTimeout(t *testing.T) {
 	}
 }
 
-func TestQuizExecCorrect(t *testing.T) {
+func TestQuizExec(t *testing.T) {
 	testCases := []struct {
 		name           string
 		input          []byte
