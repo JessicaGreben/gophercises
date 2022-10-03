@@ -76,7 +76,7 @@ func (q *Quiz) nextQuestion() question {
 	return nextQuestion
 }
 
-func (q *Quiz) completed() bool {
+func (q *Quiz) Completed() bool {
 	return q.currQuestion == len(q.questions)
 }
 
@@ -93,7 +93,7 @@ func (q *Quiz) Exec() error {
 
 	quizDone := make(chan error, 1)
 	go func() {
-		for !q.completed() {
+		for !q.Completed() {
 			qa := q.nextQuestion()
 			fmt.Fprintln(q.w, "Question: ", qa.question)
 			usersAnswer, err := q.userInputAnswer()
