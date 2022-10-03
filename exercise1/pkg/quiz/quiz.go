@@ -80,10 +80,6 @@ func (q *Quiz) completed() bool {
 	return q.currQuestion == len(q.questions)
 }
 
-func (q *Quiz) Result() Result {
-	return *q.result
-}
-
 func (q *Quiz) userInputAnswer() (string, error) {
 	if ok := q.scanner.Scan(); !ok {
 		return "", q.scanner.Err()
@@ -119,6 +115,10 @@ func (q *Quiz) Exec() error {
 	case <-ctx.Done():
 		return fmt.Errorf("%w %v", ErrTimeout, q.timer)
 	}
+}
+
+func (q *Quiz) Result() Result {
+	return *q.result
 }
 
 func (q *Quiz) CorrectAnswerCount() int {
