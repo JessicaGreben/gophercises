@@ -11,10 +11,23 @@ import (
 	"time"
 )
 
-var (
-	ErrTimeout        = errors.New("time limit exceeded")
-	ErrQuizIncomplete = errors.New("not all questions are answered")
-)
+var ErrTimeout = errors.New("time limit exceeded")
+
+type question struct {
+	question string
+	answer   string
+}
+
+type Result struct {
+	CorrectAnswerCount   int
+	IncorrectAnswerCount int
+}
+
+func (r Result) String() string {
+	return fmt.Sprintf("Quiz status: %d correct, %d incorrect.\n",
+		r.CorrectAnswerCount, r.IncorrectAnswerCount,
+	)
+}
 
 type Quiz struct {
 	ctx          context.Context
@@ -34,11 +47,11 @@ func NewQuiz(ctx context.Context, quizFilepath string, timer time.Duration, r io
 		w:       w,
 		scanner: bufio.NewScanner(r),
 	}
-	err := q.parseQuestionAnswers(quizFilepath)
+	err := q.parseQuestionsFromCSV(quizFilepath)
 	return q, err
 }
 
-func (q *Quiz) parseQuestionAnswers(quizFilepath string) error {
+func (q *Quiz) parseQuestionsFromCSV(quizFilepath string) error {
 	fd, err := os.Open(quizFilepath)
 	if err != nil {
 		return err
@@ -48,22 +61,22 @@ func (q *Quiz) parseQuestionAnswers(quizFilepath string) error {
 	if err != nil {
 		return err
 	}
-	qa := []question{}
+	questions := []question{}
 	for i := 1; i < len(rows); i++ {
 		row := rows[i]
-		qa = append(qa, newQuestion(row[0], row[1]))
+		questions = append(questions, question{row[0], row[1]})
 	}
-	q.questions = qa
+	q.questions = questions
 	return nil
 }
 
-func (q *Quiz) NextQuestion() question {
+func (q *Quiz) nextQuestion() question {
 	nextQuestion := q.questions[q.currQuestion]
 	q.currQuestion++
 	return nextQuestion
 }
 
-func (q *Quiz) Completed() bool {
+func (q *Quiz) completed() bool {
 	return q.currQuestion == len(q.questions)
 }
 
@@ -71,7 +84,7 @@ func (q *Quiz) Result() Result {
 	return *q.result
 }
 
-func (q *Quiz) UserInputAnswer() (string, error) {
+func (q *Quiz) userInputAnswer() (string, error) {
 	if ok := q.scanner.Scan(); !ok {
 		return "", q.scanner.Err()
 	}
@@ -82,14 +95,14 @@ func (q *Quiz) Exec() error {
 	ctx, cancel := context.WithTimeout(q.ctx, q.timer)
 	defer cancel()
 
-	quizCompleted := make(chan error, 1)
+	quizDone := make(chan error, 1)
 	go func() {
-		for !q.Completed() {
-			qa := q.NextQuestion()
+		for !q.completed() {
+			qa := q.nextQuestion()
 			fmt.Fprintln(q.w, "Question: ", qa.question)
-			usersAnswer, err := q.UserInputAnswer()
+			usersAnswer, err := q.userInputAnswer()
 			if err != nil {
-				quizCompleted <- err
+				quizDone <- err
 			}
 			if usersAnswer != qa.answer {
 				q.result.IncorrectAnswerCount++
@@ -97,12 +110,12 @@ func (q *Quiz) Exec() error {
 				q.result.CorrectAnswerCount++
 			}
 		}
-		quizCompleted <- nil
+		quizDone <- nil
 	}()
 
 	select {
-	case completed := <-quizCompleted:
-		return completed
+	case err := <-quizDone:
+		return err
 	case <-ctx.Done():
 		return fmt.Errorf("%w %v", ErrTimeout, q.timer)
 	}
@@ -114,27 +127,4 @@ func (q *Quiz) CorrectAnswerCount() int {
 
 func (q *Quiz) IncorrectAnswerCount() int {
 	return q.result.IncorrectAnswerCount
-}
-
-type question struct {
-	question string
-	answer   string
-}
-
-func newQuestion(q, a string) question {
-	return question{
-		question: q,
-		answer:   a,
-	}
-}
-
-type Result struct {
-	CorrectAnswerCount   int
-	IncorrectAnswerCount int
-}
-
-func (r Result) String() string {
-	return fmt.Sprintf("Quiz status: %d correct, %d incorrect.\n",
-		r.CorrectAnswerCount, r.IncorrectAnswerCount,
-	)
 }
